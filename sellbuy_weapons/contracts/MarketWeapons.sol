@@ -5,11 +5,15 @@ pragma experimental ABIEncoderV2;
 import "./abstracts/AbsItem.sol";
 import "./abstracts/ContractItem.sol";
 import "./abstracts/OwnerItem.sol";
+import "./structs/SalesInfo.sol";
+import "./structs/TxInfo.sol";
+import "./libraries/MarketWeaponsLib.sol";
 
 contract MarketWeapons {
     address payable private owner;
     bool private locked;
     ContractItem private contractItem;
+    mapping(bytes32 => SalesInfo) txSalesInfo;
 
     constructor() payable {
         owner = payable(msg.sender);
@@ -36,7 +40,7 @@ contract MarketWeapons {
     }
 
     event Deposit(uint indexed time, address account, string deposit_type, uint sum);
-    event Sell(uint indexed time, address account, string productName, uint sum);
+    event Sell(bytes32 txID, uint indexed time, uint sum);
 
     function initContractData() public onlyOwner {
         contractItem = new ContractItem(owner, address(this), block.timestamp);
@@ -62,16 +66,25 @@ contract MarketWeapons {
         }
     }
 
+    function fixTxData(string memory productName, uint256 sum) private {
+        bytes32 txID = MarketWeaponsLib.getTxID(msg.sender, block.timestamp, block.number);
+        txSalesInfo[txID] = SalesInfo(block.timestamp, msg.sender, productName, sum);
+
+        emit Sell(txID, block.timestamp, sum);
+    }
+
     function sellProduct(string memory productName, uint128 price, uint128 quantity) external payable isSenderValue(price, quantity) returns(bool){
         // check if it is not owner called
         if(owner == msg.sender){
             revert("Error! Contracts' owner is not able to call it.");
         }
 
-        // optionally, handle excess payment (refund)
+        // prepare and fix data of sale to block-chain
         uint256 sum = price * quantity;
+        fixTxData(productName, sum);
+
+        // optionally, handle excess payment (refund)
         doRefund(msg.sender, sum);
-        emit Sell(block.timestamp, msg.sender, productName, sum);
 
         return true;
     }
@@ -87,6 +100,10 @@ contract MarketWeapons {
         emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw);
 
         return true;
+    }
+
+    function getSalesInfo(bytes32 _txID) external view returns(SalesInfo memory){
+        return txSalesInfo[_txID];
     }
 
     function getContractItem() external view returns(AbsItem item){

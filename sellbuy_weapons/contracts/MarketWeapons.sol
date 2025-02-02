@@ -8,16 +8,17 @@ import "./abstracts/OwnerItem.sol";
 import "./structs/SalesInfo.sol";
 import "./structs/TxInfo.sol";
 import "./libraries/MarketWeaponsLib.sol";
+import "./interfaces/ISellBuy.sol";
 
 contract MarketWeapons {
     address payable private owner;
-    bool private locked;
-    ContractItem private contractItem;
     mapping(bytes32 => SalesInfo) txSalesInfo;
+    ContractItem public contractItem;
+    ISellBuy private sellBuy;
 
     constructor() payable {
         owner = payable(msg.sender);
-        locked = false;
+        sellBuy = ISellBuy(owner);
     }
 
     modifier onlyOwner() {
@@ -25,22 +26,8 @@ contract MarketWeapons {
         _;
     }
 
-    modifier isSenderValue(uint128 price, uint128 quantity) {
-        uint256 sum = price * quantity;
-        require(sum <= msg.value, "Error! The senders' value is less than required amount.");
-        _;
-    }
-
-    // check-effects-interactions pattern
-    modifier noReaentrancy(){
-        require(!locked, "Reentrant call detected");
-        locked = true;
-        _;
-        locked = false;
-    }
-
-    event Deposit(uint indexed time, address account, string deposit_type, uint sum);
-    event Sell(bytes32 txID, uint indexed time, uint sum);
+    event Deposit(uint indexed time, address account, string deposit_type, uint sum, bool isSuccess);
+    event Sell(bytes32 txID, uint indexed time, uint256 sum, bool isSuccess);
 
     function initContractData() public onlyOwner {
         contractItem = new ContractItem(owner, address(this), block.timestamp);
@@ -52,54 +39,50 @@ contract MarketWeapons {
 
     receive() external payable {
         uint256 _sum = msg.value;
-        require(owner.send(msg.value), "Error! The transfer of founds did not execute.");
-
-        emit Deposit(block.timestamp, msg.sender, "donation", _sum);
-    }
-
-    function doRefund(address recipient, uint256 sum) private noReaentrancy {
-        uint256 refund = msg.value - sum;
-        if(refund > 0){
-            require(address(this).balance>= refund, "Error! Not enough funds on contract balance.");
-            (bool isSuccess, ) = payable(recipient).call{value: refund}("");
-            require(isSuccess, "Error! Refund is failed.");
+        bool isSuccess = owner.send(msg.value);
+        if (!isSuccess){
+            emit Deposit(block.timestamp, msg.sender, "donation", _sum, isSuccess);
+            revert("Error! The transfer of founds did not execute.");
         }
+
+        emit Deposit(block.timestamp, msg.sender, "donation", _sum, isSuccess);
     }
 
-    function fixTxData(string memory productName, uint256 sum) private {
+    function fixTxData(string memory productName, uint256 sum) private returns(bytes32){
         bytes32 txID = MarketWeaponsLib.getTxID(msg.sender, block.timestamp, block.number);
         txSalesInfo[txID] = SalesInfo(block.timestamp, msg.sender, productName, sum);
 
-        emit Sell(txID, block.timestamp, sum);
+        return txID;
     }
 
-    function sellProduct(string memory productName, uint128 price, uint128 quantity) external payable isSenderValue(price, quantity) returns(bool){
-        // check if it is not owner called
-        if(owner == msg.sender){
-            revert("Error! Contracts' owner is not able to call it.");
-        }
+    function sellWeapons(string memory productName, uint128 price, uint128 quantity) external payable returns(bool) {
 
-        // prepare and fix data of sale to block-chain
         uint256 sum = price * quantity;
-        fixTxData(productName, sum);
-
-        // optionally, handle excess payment (refund)
-        doRefund(msg.sender, sum);
-
-        return true;
-    }
-
-    function withdrawFounds() payable external onlyOwner returns (bool){
-        if (address(this).balance == 0){
-            return false;
+        bool isSuccess = false;
+        try sellBuy.sellProduct(owner, sum){
+            isSuccess = true;
+        }
+        catch{
+            isSuccess = false;
         }
 
-        uint256 sumWithdraw = address(this).balance;
-        (bool isSuccess, ) = owner.call{value: address(this).balance}("");
-        require(isSuccess, "Error! Withdraw is failed.");
-        emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw);
+        emit Sell(fixTxData(productName, sum), block.timestamp, sum, isSuccess);
+        return isSuccess;
+    }
 
-        return true;
+    function withdrawToWallet() payable external onlyOwner returns (bool){
+        bool isSuccess = false;
+        uint256 sumWithdraw = address(this).balance;
+
+        try sellBuy.withdrawFounds(owner, address(this)){
+            isSuccess = true;
+        }
+        catch{
+            isSuccess = false;
+        }
+
+        emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw, isSuccess);
+        return isSuccess;
     }
 
     function getSalesInfo(bytes32 _txID) external view returns(SalesInfo memory){

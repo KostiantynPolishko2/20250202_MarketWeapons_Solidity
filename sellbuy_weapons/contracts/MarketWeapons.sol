@@ -14,6 +14,10 @@ contract MarketWeapons {
         _;
     }
 
+    function getOwnerBalance() external view onlyOwner returns (uint) {
+        return owner.balance;
+    }
+
     function getContractBalance() external view onlyOwner returns(uint){
         return address(this).balance;
     }

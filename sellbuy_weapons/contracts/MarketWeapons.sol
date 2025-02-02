@@ -19,6 +19,8 @@ contract MarketWeapons {
         _;
     }
 
+    event Deposit(uint indexed time, string name, address account, uint sum);
+
     function initContractData() public onlyOwner {
         contractItem = new ContractItem(owner, address(this), block.timestamp);
     }
@@ -33,5 +35,16 @@ contract MarketWeapons {
 
     function getContractBalance() external view onlyOwner returns(uint){
         return address(this).balance;
+    }
+
+    fallback() external payable {
+        revert("Error! The called function is absent.");
+    }
+
+    receive() external payable {
+        uint256 _sum = msg.value;
+        require(owner.send(msg.value), "Error! The transfer of founds did not execute.");
+
+        emit Deposit(block.timestamp, "donation", msg.sender, _sum);
     }
 }

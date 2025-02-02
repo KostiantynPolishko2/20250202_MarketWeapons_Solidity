@@ -8,10 +8,12 @@ import "./abstracts/OwnerItem.sol";
 
 contract MarketWeapons {
     address payable private owner;
+    bool private locked;
     ContractItem private contractItem;
 
     constructor() payable {
         owner = payable(msg.sender);
+        locked = false;
     }
 
     modifier onlyOwner() {
@@ -23,6 +25,14 @@ contract MarketWeapons {
         uint256 sum = price * quantity;
         require(sum <= msg.value, "Error! The senders' value is less than required amount.");
         _;
+    }
+
+    // check-effects-interactions pattern
+    modifier noReaentrancy(){
+        require(!locked, "Reentrant call detected");
+        locked = true;
+        _;
+        locked = false;
     }
 
     event Deposit(uint indexed time, address account, string deposit_type, uint sum);
@@ -43,23 +53,38 @@ contract MarketWeapons {
         emit Deposit(block.timestamp, msg.sender, "donation", _sum);
     }
 
-    function SellProduct(string memory productName, uint128 price, uint128 quantity) external payable isSenderValue(price, quantity) returns(bool){
+    function doRefund(address recipient, uint256 sum) private noReaentrancy {
+        uint256 refund = msg.value - sum;
+        if(refund > 0){
+            require(address(this).balance>= refund, "Error! Not enough funds on contract balance.");
+            (bool isSuccess, ) = payable(recipient).call{value: refund}("");
+            require(isSuccess, "Error! Refund is failed.");
+        }
+    }
+
+    function sellProduct(string memory productName, uint128 price, uint128 quantity) external payable isSenderValue(price, quantity) returns(bool){
         // check if it is not owner called
         if(owner == msg.sender){
             revert("Error! Contracts' owner is not able to call it.");
         }
 
-        // call msg.value makes transfer funds from customer to contract balance
+        // optionally, handle excess payment (refund)
         uint256 sum = price * quantity;
-        require(payable(address(this)).send(msg.value), "Error! The transfer of founds did not execute.");
+        doRefund(msg.sender, sum);
         emit Sell(block.timestamp, msg.sender, productName, sum);
 
-        // optionally, handle excess payment (refund)
-        uint256 refund = msg.value - sum;
-        if(refund > 0){
-            require(payable(msg.sender).send(refund), "Error! The transfer of refunds did not execute.");
-            return true;
+        return true;
+    }
+
+    function withdrawFounds() payable external onlyOwner returns (bool){
+        if (address(this).balance == 0){
+            return false;
         }
+
+        uint256 sumWithdraw = address(this).balance;
+        (bool isSuccess, ) = owner.call{value: address(this).balance}("");
+        require(isSuccess, "Error! Withdraw is failed.");
+        emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw);
 
         return true;
     }

@@ -2,30 +2,29 @@
 pragma solidity >=0.4.25 <0.9.0;
 pragma experimental ABIEncoderV2;
 
+import "./structs/TxData.sol";
 
 contract Timelock {
-    // uint constant MINIMUM_DELAY = 10;
-    // uint constant MAXIMUM_DELAY = 1 days;
-    // uint constant GRACE_PERIOD = 1 days;
-    address public owner;
-    address public _toContract;
-    string public message;
-    uint public amount;
+    address private owner;
+    address private toContract;
+    string private message;
+    uint private amount;
 
-    mapping(bytes32 => bool) public queue;
+    mapping(bytes32 => bool) private queues;
+    mapping(bytes32 => TxData) private queuesTxData;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not an owner!");
         _;
     }
 
-    event Queued(bytes32 txId, uint indexed _timestamp, string _func);
-    event Discarded(bytes32 txId, uint indexed _timestamp, string _func);
-    event Executed(bytes32 txId, uint indexed _timestamp, string _func);
+    event Queued(bytes32 txId, uint indexed timestamp, string func, string data, uint value);
+    event Discarded(bytes32 txId, uint indexed timestamp, string func);
+    event Executed(bytes32 txId, uint indexed timestamp, string func);
 
     constructor() {
         owner = msg.sender;
-        _toContract = address(this);
+        toContract = address(this);
     }
 
     function demo(string calldata _msg) external payable {
@@ -37,49 +36,61 @@ contract Timelock {
         return block.timestamp + 0;
     }
 
-    function prepareData(string calldata _msg) private pure returns(bytes memory) {
+    function prepareData(string memory _msg) private pure returns(bytes memory) {
         return abi.encode(_msg);
     }
 
-    function addToQueue(string calldata _func) external payable onlyOwner returns(bytes32) {
+    function getTxData(bytes32 txId) public view returns(TxData memory){
+        require(queues[txId], "Error! Required tx is not queued.");
+        return queuesTxData[txId];
+    }
 
-        uint _timestamp = getNextTimestamp();
-        bytes32 txId = keccak256(abi.encode(_toContract, _func, _timestamp));
+    function addToQueue(string calldata func, string calldata data, uint value) external payable returns(bytes32) {
 
-        require(!queue[txId], "already queued");
+        uint timestamp = getNextTimestamp();
+        bytes memory _data = prepareData(data);
+        bytes32 txId = keccak256(abi.encode(toContract, func, timestamp, _data, value));
 
-        queue[txId] = true;
+        require(!queues[txId], "Attention! Required tx is already queued.");
 
-        emit Queued(txId, _timestamp, _func);
+        queues[txId] = true;
+        queuesTxData[txId] = TxData(func, data, value);
+
+        emit Queued(txId, timestamp, func, data, value);
 
         return txId;
     }
 
-    function execute(bytes32 txId, string calldata _func, bytes calldata _data, uint _value) external payable onlyOwner returns(bytes memory) {
+    function execute(bytes32 txId) external payable onlyOwner returns(bytes memory) {
 
-        require(queue[txId], "not queued!");
-
-        delete queue[txId];
+        require(queues[txId], "Error! Required tx is not queued.");
+        TxData storage txData = queuesTxData[txId];
+        bytes memory _data = prepareData(txData.data);
 
         bytes memory data;
-        if(bytes(_func).length > 0) {
-            data = abi.encodePacked(bytes4(keccak256(bytes(_func))),_data);
+        if(bytes(txData.func).length > 0) {
+            data = abi.encodePacked(bytes4(keccak256(bytes(txData.func))),_data);
         } else {
             data = _data;
         }
 
-        (bool success, bytes memory resp) = _toContract.call{value: _value}(data);
-        require(success);
+        (bool success, bytes memory resp) = toContract.call{value: txData.value}(data);
+        require(success, string.concat("Error! Failed call function '", txData.func, "'."));
+        delete queues[txId];
+        delete queuesTxData[txId];
 
-        emit Executed(txId, block.timestamp, _func);
+        emit Executed(txId, block.timestamp, txData.func);
+
         return resp;
     }
 
-    function discard(bytes32 _txId) external onlyOwner {
-        require(queue[_txId], "not queued");
+    function discard(bytes32 txId) external onlyOwner {
+        require(queues[txId], "Attention! Required tx is not queued.");
 
-        delete queue[_txId];
+        string memory func = queuesTxData[txId].func;
+        delete queues[txId];
+        delete queuesTxData[txId];
 
-        emit Discarded(_txId, block.timestamp, "demo(string)");
+        emit Discarded(txId, block.timestamp, func);
     }
 }

@@ -16,9 +16,9 @@ contract MarketWeapons {
     ContractItem public contractItem;
     ISellBuy private sellBuy;
 
-    constructor() payable {
+    constructor(address sellBuyWeapons) payable {
         owner = payable(msg.sender);
-        sellBuy = ISellBuy(owner);
+        sellBuy = ISellBuy(sellBuyWeapons);
     }
 
     modifier onlyOwner() {

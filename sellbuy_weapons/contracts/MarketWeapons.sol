@@ -14,7 +14,7 @@ contract MarketWeapons {
     address payable private owner;
     bool private locked;
     mapping(bytes32 => SalesInfo) txSalesInfo;
-    ContractItem public contractItem;
+    ContractItem private contractItem;
     ISellBuy private sellBuy;
 
     constructor(address sellBuyWeapons) payable {
@@ -39,10 +39,6 @@ contract MarketWeapons {
     event Deposit(uint indexed time, address account, string deposit_type, uint sum, bool isSuccess);
     event Sell(bytes32 txID, uint indexed time, uint256 sum, bool isSuccess);
 
-    function initContractData() public onlyOwner {
-        contractItem = new ContractItem(owner, address(this), block.timestamp);
-    }
-
     fallback() external payable {
         revert("Error! The called function is absent.");
     }
@@ -56,6 +52,10 @@ contract MarketWeapons {
         }
 
         emit Deposit(block.timestamp, msg.sender, "donation", _sum, isSuccess);
+    }
+
+    function initContractData() public onlyOwner {
+        contractItem = new ContractItem(owner, address(this), block.timestamp);
     }
 
     function fixTxData(string memory productName, uint256 sum) private returns(bytes32){
@@ -100,21 +100,12 @@ contract MarketWeapons {
         require(isSuccess, "Error! Withdraw is failed.");
     }
 
-    function withdrawToWallet() payable external onlyOwner returns (bool){
-        bool isSuccess = false;
-        uint256 sumWithdraw = address(this).balance;
+    function withdrawToWallet() payable external onlyOwner{
 
+        uint256 sumWithdraw = address(this).balance;
         withdrawFounds(owner, address(this));
 
-        // try sellBuy.withdrawFounds(owner, address(this)){
-        //     isSuccess = true;
-        // }
-        // catch{
-        //     isSuccess = false;
-        // }
-
-        emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw, isSuccess);
-        return isSuccess;
+        emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw, true);
     }
 
     function getSalesInfo(bytes32 _txID) external view returns(SalesInfo memory){
@@ -122,7 +113,7 @@ contract MarketWeapons {
     }
 
     function getContractItem() external view returns(AbsItem item){
-        return contractItem;
+        return ContractItem(contractItem);
     }
 
     function getOwnerBalance() external view onlyOwner returns (uint) {

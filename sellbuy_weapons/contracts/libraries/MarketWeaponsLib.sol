@@ -7,4 +7,12 @@ library MarketWeaponsLib {
         return keccak256(abi.encodePacked(account, time, number));
     }
     
+    function withdrawFounds(address wallet, address _contract) internal{
+        if (address(_contract).balance == 0){
+            revert("Error! Contracts' balance is 0 wei");
+        }
+
+        (bool isSuccess, ) = payable(wallet).call{value: address(_contract).balance}("");
+        require(isSuccess, "Error! Withdraw is failed.");
+    }
 }

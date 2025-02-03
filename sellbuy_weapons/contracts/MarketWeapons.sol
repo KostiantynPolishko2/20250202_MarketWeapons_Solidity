@@ -9,6 +9,7 @@ import "./structs/SalesInfo.sol";
 import "./structs/TxInfo.sol";
 import "./libraries/MarketWeaponsLib.sol";
 import "./interfaces/ISellBuy.sol";
+import "./structs/ContractInfo.sol";
 
 contract MarketWeapons {
     address payable private owner;
@@ -36,8 +37,14 @@ contract MarketWeapons {
         locked = false;
     }
 
+    modifier msgValue(uint256 sum) {
+        require(sum <= msg.value, "Error! The senders' value is less than required amount.");
+        _;
+    }
+
     event Deposit(uint indexed time, address account, string deposit_type, uint sum, bool isSuccess);
     event Sell(bytes32 txID, uint indexed time, uint256 sum, bool isSuccess);
+    event Fail(uint indexed time, string reason);
 
     fallback() external payable {
         revert("Error! The called function is absent.");
@@ -74,14 +81,19 @@ contract MarketWeapons {
         }
     }
 
-    function sellWeapons(string memory productName, uint128 price, uint128 quantity) external payable returns(bool) {
+    function sellWeapons(string memory productName, uint128 price, uint128 quantity) external payable msgValue(price * quantity) returns(bool) {
 
         uint256 sum = price * quantity;
         bool isSuccess = false;
-        try sellBuy.sellProduct(msg.sender, owner, sum){
-            isSuccess = true;
+        try sellBuy.sellProduct(msg.sender, owner) returns(bool result){
+            isSuccess = result;
+        }
+        catch Error(string memory reason){
+            emit Fail(block.timestamp, reason);
+            isSuccess = false;
         }
         catch{
+            emit Fail(block.timestamp, "undefined");
             isSuccess = false;
         }
 
@@ -91,19 +103,10 @@ contract MarketWeapons {
         return isSuccess;
     }
 
-    function withdrawFounds(address wallet, address _contract) private onlyOwner{
-        if (address(_contract).balance == 0){
-            revert("Error! Contracts' balance is 0 wei");
-        }
-
-        (bool isSuccess, ) = payable(wallet).call{value: address(_contract).balance}("");
-        require(isSuccess, "Error! Withdraw is failed.");
-    }
-
     function withdrawToWallet() payable external onlyOwner{
 
         uint256 sumWithdraw = address(this).balance;
-        withdrawFounds(owner, address(this));
+        MarketWeaponsLib.withdrawFounds(owner, address(this));
 
         emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw, true);
     }
@@ -112,8 +115,8 @@ contract MarketWeapons {
         return txSalesInfo[_txID];
     }
 
-    function getContractItem() external view returns(AbsItem item){
-        return ContractItem(contractItem);
+    function getContractItem() external view returns(ContractInfo memory){
+        return contractItem.getInfo();
     }
 
     function getOwnerBalance() external view onlyOwner returns (uint) {

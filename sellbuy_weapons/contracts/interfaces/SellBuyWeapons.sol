@@ -19,21 +19,18 @@ contract SellBuyWeapons is ISellBuy {
         locked = false;
     }
 
-    modifier isSenderValue(uint256 sum) {
-        require(sum <= msg.value, "Error! The senders' value is less than required amount.");
-        _;
-    }
-
     function doRefund(address recipient, uint256 refund) external payable noReaentrancy {
         (bool isSuccess, ) = payable(recipient).call{value: refund}("");
         require(isSuccess, "Error! Refund is failed.");
     }
 
-    function sellProduct(address sender, address owner, uint256 sum) external payable isSenderValue(sum){
+    function sellProduct(address sender, address owner) external payable returns(bool){
         // check if it is not owner called
         if(owner == sender){
             revert("Error! Contracts' owner is not able to call it.");
         }
+
+        return true;
     }
 
     function withdrawFounds(address wallet, address _contract) external payable {

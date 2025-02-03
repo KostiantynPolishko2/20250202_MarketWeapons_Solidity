@@ -6,4 +6,5 @@ library MarketWeaponsLib {
     function getTxID(address account, uint time, uint256 number) internal pure returns(bytes32) {
         return keccak256(abi.encodePacked(account, time, number));
     }
+    
 }

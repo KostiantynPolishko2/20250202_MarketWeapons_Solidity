@@ -24,23 +24,16 @@ contract SellBuyWeapons is ISellBuy {
         _;
     }
 
-    function doRefund(address recipient, uint256 sum) private noReaentrancy {
-        uint256 refund = msg.value - sum;
-        if(refund > 0){
-            require(address(this).balance>= refund, "Error! Not enough funds on contract balance.");
-            (bool isSuccess, ) = payable(recipient).call{value: refund}("");
-            require(isSuccess, "Error! Refund is failed.");
-        }
+    function doRefund(address recipient, uint256 refund) external payable noReaentrancy {
+        (bool isSuccess, ) = payable(recipient).call{value: refund}("");
+        require(isSuccess, "Error! Refund is failed.");
     }
 
-    function sellProduct(address owner, uint256 sum) external payable isSenderValue(sum){
+    function sellProduct(address sender, address owner, uint256 sum) external payable isSenderValue(sum){
         // check if it is not owner called
-        if(owner == msg.sender){
+        if(owner == sender){
             revert("Error! Contracts' owner is not able to call it.");
         }
-
-        // optionally, handle excess payment (refund)
-        doRefund(msg.sender, sum);
     }
 
     function withdrawFounds(address wallet, address _contract) external payable {

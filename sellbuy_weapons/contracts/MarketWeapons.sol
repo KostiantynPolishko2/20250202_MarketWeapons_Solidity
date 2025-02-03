@@ -12,18 +12,28 @@ import "./interfaces/ISellBuy.sol";
 
 contract MarketWeapons {
     address payable private owner;
+    bool private locked;
     mapping(bytes32 => SalesInfo) txSalesInfo;
     ContractItem public contractItem;
     ISellBuy private sellBuy;
 
     constructor(address sellBuyWeapons) payable {
         owner = payable(msg.sender);
+        locked = false;
         sellBuy = ISellBuy(sellBuyWeapons);
     }
 
     modifier onlyOwner() {
         require(owner == msg.sender, "Error! Only owner can call.");
         _;
+    }
+
+    // check-effects-interactions pattern
+    modifier noReaentrancy(){
+        require(!locked, "Reentrant call detected");
+        locked = true;
+        _;
+        locked = false;
     }
 
     event Deposit(uint indexed time, address account, string deposit_type, uint sum, bool isSuccess);
@@ -55,16 +65,27 @@ contract MarketWeapons {
         return txID;
     }
 
+    function refund(address recipient, uint256 sum) private noReaentrancy {
+        uint256 refund_sum = msg.value - sum;
+        if(refund_sum > 0){
+            require(address(this).balance>= refund_sum, "Error! Not enough funds on contract balance.");
+            (bool isSuccess, ) = payable(recipient).call{value: refund_sum}("");
+            require(isSuccess, "Error! Refund is failed.");
+        }
+    }
+
     function sellWeapons(string memory productName, uint128 price, uint128 quantity) external payable returns(bool) {
 
         uint256 sum = price * quantity;
         bool isSuccess = false;
-        try sellBuy.sellProduct(owner, sum){
+        try sellBuy.sellProduct(msg.sender, owner, sum){
             isSuccess = true;
         }
         catch{
             isSuccess = false;
         }
+
+        refund(msg.sender, sum);
 
         emit Sell(fixTxData(productName, sum), block.timestamp, sum, isSuccess);
         return isSuccess;

@@ -70,16 +70,27 @@ contract MarketWeapons {
         return isSuccess;
     }
 
+    function withdrawFounds(address wallet, address _contract) private onlyOwner{
+        if (address(_contract).balance == 0){
+            revert("Error! Contracts' balance is 0 wei");
+        }
+
+        (bool isSuccess, ) = payable(wallet).call{value: address(_contract).balance}("");
+        require(isSuccess, "Error! Withdraw is failed.");
+    }
+
     function withdrawToWallet() payable external onlyOwner returns (bool){
         bool isSuccess = false;
         uint256 sumWithdraw = address(this).balance;
 
-        try sellBuy.withdrawFounds(owner, address(this)){
-            isSuccess = true;
-        }
-        catch{
-            isSuccess = false;
-        }
+        withdrawFounds(owner, address(this));
+
+        // try sellBuy.withdrawFounds(owner, address(this)){
+        //     isSuccess = true;
+        // }
+        // catch{
+        //     isSuccess = false;
+        // }
 
         emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw, isSuccess);
         return isSuccess;

@@ -48,7 +48,7 @@ contract SellBuyWeapons is ISellBuy {
             revert("Error! Contracts' balance is 0 wei");
         }
 
-        (bool isSuccess, ) = wallet.call{value: address(_contract).balance}("");
+        (bool isSuccess, ) = payable(wallet).call{value: address(_contract).balance}("");
         require(isSuccess, "Error! Withdraw is failed.");
     }
 }

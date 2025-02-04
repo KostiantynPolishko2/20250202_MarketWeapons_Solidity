@@ -81,26 +81,26 @@ contract MarketWeapons {
         }
     }
 
-    function sellWeapons(address client, string calldata productName, uint sum) public payable returns(bool) {
+    function sellWeapons(string calldata productName) public payable {
 
         // uint256 sum = price * quantity;
-        bool isSuccess = false;
-        try sellBuy.sellProduct(client, owner) returns(bool result){
-            isSuccess = result;
-        }
-        catch Error(string memory reason){
-            emit Fail(block.timestamp, reason);
-            isSuccess = false;
-        }
-        catch{
-            emit Fail(block.timestamp, "undefined");
-            isSuccess = false;
-        }
+        // bool isSuccess = false;
+        // try sellBuy.sellProduct(client, owner) returns(bool result){
+        //     isSuccess = result;
+        // }
+        // catch Error(string memory reason){
+        //     emit Fail(block.timestamp, reason);
+        //     isSuccess = false;
+        // }
+        // catch{
+        //     emit Fail(block.timestamp, "undefined");
+        //     isSuccess = false;
+        // }
 
-        refund(client, sum);
+        // refund(client, sum);
 
-        emit Sell(fixTxData(client, productName, sum), block.timestamp, sum, isSuccess);
-        return isSuccess;
+        // emit Sell(fixTxData(client, productName, sum), block.timestamp, sum, true);
+        // return true;
     }
 
     function withdrawToWallet() payable external onlyOwner{

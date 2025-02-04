@@ -14,42 +14,26 @@ contract Market {
         _;
     }
 
+    fallback() external payable {
+        revert("Error! The called function is absent.");
+    }
+
     receive() external payable {}
 
-    event ProductSold(string productName, uint timestamp);
+    event ProductSold(uint indexed timestamp, string productName, uint sum);
 
     constructor()payable{
         owner = msg.sender;
     }
 
-    // function initTimeLok() public onlyOwner{
-    //     timeLock = new TimeLock(address(this));
-    // }
 
     function getBalance() external view onlyOwner returns(uint){
         return address(this).balance;
     }
 
     // Sell Product (Funds received from Timelock)
-    function sellProduct(string calldata productName) external payable {
-        // require(msg.value >= sum, "Attention! Not enought funds.");
-        emit ProductSold(productName, block.timestamp);
+    function sellProduct(string calldata productName) public payable {
+        emit ProductSold(block.timestamp, productName, msg.value);
     }
 
-    // function getTxDataSallProduct(bytes32 txId) public view onlyOwner returns(TxData memory){
-    //     return timeLock.getTxData(txId);
-    // }
-
-    // function addToQueueTxSellProduct(string calldata _productName, uint sum)external payable returns(bytes32){
-    //     TxData memory txData = TxData(msg.sender, msg.value, "sellProduct(string)", _productName, sum);
-    //     return timeLock.addToQueue(txData);
-    // }
-
-    // function executeTxSellProduct(bytes32 txId) external payable onlyOwner returns(bytes memory){
-    //     return timeLock.execute(txId);
-    // }
-
-    // function removeFromQueueTxSellProduct(bytes32 txId) external onlyOwner {
-    //     timeLock.discard(txId);
-    // }
 }

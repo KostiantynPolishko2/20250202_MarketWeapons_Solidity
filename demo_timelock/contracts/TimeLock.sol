@@ -15,9 +15,18 @@ contract TimeLock {
         _;
     }
 
-    event Queued(bytes32 txId, uint indexed timestamp, address client, string func, string data, uint value);
-    event Discarded(bytes32 txId, uint indexed timestamp, string func);
-    event Executed(bytes32 txId, uint indexed timestamp, string func);
+    modifier ValueMoreEqualSum(uint sum){
+        require(msg.value >= sum, "Attention! The send founds less than requested sum.");
+        _;
+    }
+
+    event Queued(uint indexed timestamp, bytes32 txId, string func, address client, uint indexed sum);
+    event Executed(bytes32 txId, string func, address client, uint indexed sum);
+    event Discarded(bytes32 txId, string func, address client, uint indexed sum);
+
+    fallback() external payable {
+        revert("Error! The called function is absent.");
+    }
 
     receive() external payable {}
 
@@ -43,8 +52,9 @@ contract TimeLock {
         return queuesTxData[txId];
     }
 
-    function addToQueue(string calldata productName, uint sum) public payable returns(bytes32) {
-
+    function addToQueue(string calldata productName, uint sum) public payable ValueMoreEqualSum(sum) returns(bytes32) {
+        require(!(msg.sender == owner), "Attention! Transaction can not be done by owner.");
+        
         uint timestamp = getNextTimestamp();
         bytes memory _data = prepareData(productName);
         bytes32 txId = keccak256(abi.encode(market, msg.sender, timestamp, _data, sum));
@@ -54,7 +64,7 @@ contract TimeLock {
         queues[txId] = true;
         queuesTxData[txId] = TxData(msg.sender, msg.value, "sellProduct(string)", productName, sum);
 
-        emit Queued(txId, timestamp, msg.sender, "sellProduct(string)", productName, sum);
+        emit Queued(block.timestamp, txId, "sellProduct(string)", msg.sender, sum);
 
         return txId;
     }
@@ -63,9 +73,7 @@ contract TimeLock {
  
         require(queues[txId], "Error! Required tx is not queued.");
         TxData storage txData = queuesTxData[txId];
-        // bytes memory _productName = prepareData(txData.productName);
 
-        //bytes memory data = abi.encodePacked(bytes4(keccak256(bytes(txData.func))), txData.productName);
         bytes memory data = abi.encodeWithSignature(txData.func, txData.productName);
 
         (bool success, bytes memory resp) = market.call{value: txData.sum}(data); // sellProduct("f1")
@@ -73,7 +81,7 @@ contract TimeLock {
         delete queues[txId];
         delete queuesTxData[txId];
 
-        emit Executed(txId, block.timestamp, txData.func);
+        emit Executed(txId, txData.func, txData.client, txData.sum);
 
         return resp;
     }
@@ -81,10 +89,10 @@ contract TimeLock {
     function discard(bytes32 txId) public {
         require(queues[txId], "Attention! Required tx is not queued.");
 
-        string memory func = queuesTxData[txId].func;
+        TxData storage txData = queuesTxData[txId];
         delete queues[txId];
         delete queuesTxData[txId];
 
-        emit Discarded(txId, block.timestamp, func);
+        emit Discarded(txId, txData.func, txData.client, txData.sum);
     }
 }

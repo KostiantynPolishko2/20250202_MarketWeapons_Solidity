@@ -6,7 +6,7 @@ import "./abstracts/AbsItem.sol";
 import "./abstracts/ContractItem.sol";
 import "./abstracts/OwnerItem.sol";
 import "./structs/SalesInfo.sol";
-import "./structs/TxInfo.sol";
+// import "./structs/TxInfo.sol";
 import "./libraries/MarketWeaponsLib.sol";
 import "./interfaces/ISellBuy.sol";
 import "./structs/ContractInfo.sol";
@@ -17,12 +17,6 @@ contract MarketWeapons {
     mapping(bytes32 => SalesInfo) txSalesInfo;
     ContractItem private contractItem;
     ISellBuy private sellBuy;
-
-    constructor(address sellBuyWeapons) payable {
-        owner = payable(msg.sender);
-        locked = false;
-        sellBuy = ISellBuy(sellBuyWeapons);
-    }
 
     modifier onlyOwner() {
         require(owner == msg.sender, "Error! Only owner can call.");
@@ -37,10 +31,10 @@ contract MarketWeapons {
         locked = false;
     }
 
-    modifier msgValue(uint256 sum) {
-        require(sum <= msg.value, "Error! The senders' value is less than required amount.");
-        _;
-    }
+    // modifier msgValue(uint256 sum) {
+    //     require(sum <= msg.value, "Error! The senders' value is less than required amount.");
+    //     _;
+    // }
 
     event Deposit(uint indexed time, address account, string deposit_type, uint sum, bool isSuccess);
     event Sell(bytes32 txID, uint indexed time, uint256 sum, bool isSuccess);
@@ -61,31 +55,37 @@ contract MarketWeapons {
         emit Deposit(block.timestamp, msg.sender, "donation", _sum, isSuccess);
     }
 
+    constructor(address sellBuyWeapons) payable {
+        owner = payable(msg.sender);
+        locked = false;
+        sellBuy = ISellBuy(sellBuyWeapons);
+    }
+
     function initContractData() public onlyOwner {
         contractItem = new ContractItem(owner, address(this), block.timestamp);
     }
 
-    function fixTxData(string memory productName, uint256 sum) private returns(bytes32){
-        bytes32 txID = MarketWeaponsLib.getTxID(msg.sender, block.timestamp, block.number);
-        txSalesInfo[txID] = SalesInfo(block.timestamp, msg.sender, productName, sum);
+    function fixTxData(address client, string calldata productName, uint256 sum) private returns(bytes32){
+        bytes32 txID = MarketWeaponsLib.getTxID(client, block.timestamp, block.number);
+        txSalesInfo[txID] = SalesInfo(block.timestamp, client, productName, sum);
 
         return txID;
     }
 
-    function refund(address recipient, uint256 sum) private noReaentrancy {
+    function refund(address client, uint256 sum) private noReaentrancy {
         uint256 refund_sum = msg.value - sum;
         if(refund_sum > 0){
             require(address(this).balance>= refund_sum, "Error! Not enough funds on contract balance.");
-            (bool isSuccess, ) = payable(recipient).call{value: refund_sum}("");
+            (bool isSuccess, ) = payable(client).call{value: refund_sum}("");
             require(isSuccess, "Error! Refund is failed.");
         }
     }
 
-    function sellWeapons(string memory productName, uint128 price, uint128 quantity) external payable msgValue(price * quantity) returns(bool) {
+    function sellWeapons(address client, string calldata productName, uint sum) public payable returns(bool) {
 
-        uint256 sum = price * quantity;
+        // uint256 sum = price * quantity;
         bool isSuccess = false;
-        try sellBuy.sellProduct(msg.sender, owner) returns(bool result){
+        try sellBuy.sellProduct(client, owner) returns(bool result){
             isSuccess = result;
         }
         catch Error(string memory reason){
@@ -97,9 +97,9 @@ contract MarketWeapons {
             isSuccess = false;
         }
 
-        refund(msg.sender, sum);
+        refund(client, sum);
 
-        emit Sell(fixTxData(productName, sum), block.timestamp, sum, isSuccess);
+        emit Sell(fixTxData(client, productName, sum), block.timestamp, sum, isSuccess);
         return isSuccess;
     }
 
@@ -108,7 +108,7 @@ contract MarketWeapons {
         uint256 sumWithdraw = address(this).balance;
         MarketWeaponsLib.withdrawFounds(owner, address(this));
 
-        emit Deposit(block.timestamp, msg.sender, "donation", sumWithdraw, true);
+        emit Deposit(block.timestamp, owner, "witdraw", sumWithdraw, true);
     }
 
     function getSalesInfo(bytes32 _txID) external view returns(SalesInfo memory){

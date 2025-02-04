@@ -79,9 +79,10 @@ contract TimeLock {
         require(!queues[txId], "Attention! Required tx is already queued.");
 
         queues[txId] = true;
-        queuesTxData[txId] = TxData(msg.sender, msg.value, "sellProduct(string)", productName, sum);
+        string memory func = "sellWeapons(address, string, uint)";
+        queuesTxData[txId] = TxData(msg.sender, msg.value, func, productName, sum);
 
-        emit Queued(block.timestamp, txId, "sellProduct(string)", msg.sender, sum);
+        emit Queued(block.timestamp, txId, func, msg.sender, sum);
 
         return txId;
     }
@@ -91,7 +92,7 @@ contract TimeLock {
         require(queues[txId], "Error! Required tx is not queued.");
         TxData storage txData = queuesTxData[txId];
 
-        bytes memory data = abi.encodeWithSignature(txData.func, txData.productName);
+        bytes memory data = abi.encodeWithSignature(txData.func, txData.client, txData.productName, txData.sum);
 
         (bool success, bytes memory resp) = market.call{value: txData.sum}(data); // sellProduct("f1")
         require(success, string.concat("Error! Failed call function '", txData.func, "'."));

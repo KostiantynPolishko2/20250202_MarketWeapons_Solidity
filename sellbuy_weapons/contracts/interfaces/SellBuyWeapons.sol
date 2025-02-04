@@ -24,9 +24,9 @@ contract SellBuyWeapons is ISellBuy {
         require(isSuccess, "Error! Refund is failed.");
     }
 
-    function sellProduct(address sender, address owner) external payable returns(bool){
+    function sellProduct(address client, address owner) external payable returns(bool){
         // check if it is not owner called
-        if(owner == sender){
+        if(client == owner){
             revert("Error! Contracts' owner is not able to call it.");
         }
 

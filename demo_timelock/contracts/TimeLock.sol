@@ -7,6 +7,7 @@ import "./structs/TxData.sol";
 contract TimeLock {
     address private market;
     address private owner;
+    bool private locked;
     mapping(bytes32 => bool) private queues;
     mapping(bytes32 => TxData) private queuesTxData;
 
@@ -18,6 +19,14 @@ contract TimeLock {
     modifier ValueMoreEqualSum(uint sum){
         require(msg.value >= sum, "Attention! The send founds less than requested sum.");
         _;
+    }
+
+    // check-effects-interactions pattern
+    modifier noReaentrancy(){
+        require(!locked, "Reentrant call detected");
+        locked = true;
+        _;
+        locked = false;
     }
 
     event Queued(uint indexed timestamp, bytes32 txId, string func, address client, uint indexed sum);
@@ -33,6 +42,7 @@ contract TimeLock {
     constructor(address _market) payable {
         market = _market;
         owner = msg.sender;
+        locked = false;
     }
 
     function getNextTimestamp() private view returns(uint) {
@@ -47,9 +57,16 @@ contract TimeLock {
         return address(this).balance;
     }
 
-    function getTxData(bytes32 txId) public view onlyOwner returns(TxData memory){
+    function getTxData(bytes32 txId) public view returns(TxData memory){
+        
         require(queues[txId], "Error! Required tx is not queued.");
-        return queuesTxData[txId];
+
+        TxData memory txData = queuesTxData[txId];
+        if(msg.sender == txData.client || msg.sender == owner){
+            return txData;
+        }
+
+        revert("Attettion! You are not transactions' owner");
     }
 
     function addToQueue(string calldata productName, uint sum) public payable ValueMoreEqualSum(sum) returns(bytes32) {
@@ -86,10 +103,20 @@ contract TimeLock {
         return resp;
     }
 
-    function discard(bytes32 txId) public {
+    function discard(bytes32 txId) public noReaentrancy {
         require(queues[txId], "Attention! Required tx is not queued.");
 
         TxData storage txData = queuesTxData[txId];
+        if(msg.sender == txData.client || msg.sender == owner){
+            require(address(this).balance >= txData.value, "Attention! The contract balance is not enough to refund.");
+        }
+        else{
+            revert("Attettion! You are not transactions' owner");
+        }
+
+        (bool isSuccess, ) = payable(txData.client).call{value: txData.value}("");
+        require(isSuccess, "Error! Refund is failed during discard.");
+
         delete queues[txId];
         delete queuesTxData[txId];
 

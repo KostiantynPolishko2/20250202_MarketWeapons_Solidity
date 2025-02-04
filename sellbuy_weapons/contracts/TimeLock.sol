@@ -29,7 +29,7 @@ contract TimeLock {
         locked = false;
     }
 
-    event Queued(uint indexed timestamp, bytes32 txId, string func, address client, uint indexed sum);
+    event Queued(bytes32 txId, uint indexed timestamp, string func, address client, uint indexed sum);
     event Executed(bytes32 txId, string func, address client, uint indexed sum);
     event Discarded(bytes32 txId, string func, address client, uint indexed sum);
 
@@ -79,10 +79,10 @@ contract TimeLock {
         require(!queues[txId], "Attention! Required tx is already queued.");
 
         queues[txId] = true;
-        string memory func = "sellWeapons(address,string,bytes32)";
+        string memory func = "sellWeapons(bytes32,address,string,bytes32)";
         queuesTxData[txId] = TxData(msg.sender, msg.value, func, productName, sum);
 
-        emit Queued(block.timestamp, txId, func, msg.sender, sum);
+        emit Queued(txId, block.timestamp, func, msg.sender, sum);
 
         return txId;
     }
@@ -93,7 +93,7 @@ contract TimeLock {
         TxData storage txData = queuesTxData[txId];
 
         bytes32 _sum = bytes32(abi.encodePacked(txData.sum));
-        bytes memory data = abi.encodeWithSignature(txData.func, txData.client, txData.productName, _sum);
+        bytes memory data = abi.encodeWithSignature(txData.func, txId, txData.client, txData.productName, _sum);
         // uint clientValue = txData.sum;
         (bool success, bytes memory resp) = market.call{value: txData.value}(data);
         require(success, string.concat("Error! Failed call function '", txData.func, "'."));

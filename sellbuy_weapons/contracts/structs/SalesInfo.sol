@@ -4,7 +4,7 @@ pragma experimental ABIEncoderV2;
 
 struct SalesInfo {
     uint time;
-    address account;
-    string product_name;
+    address client;
+    string productName;
     uint256 sum;
 }

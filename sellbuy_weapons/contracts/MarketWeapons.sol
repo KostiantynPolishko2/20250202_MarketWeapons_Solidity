@@ -31,13 +31,8 @@ contract MarketWeapons {
         locked = false;
     }
 
-    // modifier msgValue(uint256 sum) {
-    //     require(sum <= msg.value, "Error! The senders' value is less than required amount.");
-    //     _;
-    // }
-
     event Deposit(uint indexed time, address account, string deposit_type, uint sum, bool isSuccess);
-    event Sell(bytes32 txID, uint indexed time, uint256 sum, bool isSuccess);
+    event Sell(bytes32 txID, string productName, uint256 sum, bool isSuccess);
     event Fail(uint indexed time, string reason);
 
     fallback() external payable {
@@ -65,11 +60,9 @@ contract MarketWeapons {
         contractItem = new ContractItem(owner, address(this), block.timestamp);
     }
 
-    function fixTxData(address client, string calldata productName, uint256 sum) private returns(bytes32){
-        bytes32 txID = MarketWeaponsLib.getTxID(client, block.timestamp, block.number);
-        txSalesInfo[txID] = SalesInfo(block.timestamp, client, productName, sum);
+    function fixTxData(bytes32 txId, address client, string calldata productName, uint256 sum) private {
+        txSalesInfo[txId] = SalesInfo(block.timestamp, client, productName, sum);
 
-        return txID;
     }
 
     function refund(address client, uint256 sum) private noReaentrancy {
@@ -81,7 +74,7 @@ contract MarketWeapons {
         }
     }
 
-    function sellWeapons(address client, string calldata productName, bytes32 _sum) public payable returns(bool){
+    function sellWeapons(bytes32 txId, address client, string calldata productName, bytes32 _sum) public payable returns(bool){
 
         uint sum = abi.decode(abi.encodePacked(_sum), (uint));
         bool isSuccess = false;
@@ -99,7 +92,8 @@ contract MarketWeapons {
 
         refund(client, sum);
 
-        emit Sell(fixTxData(client, productName, sum), block.timestamp, sum, true);
+        fixTxData(txId, client, productName, sum);
+        emit Sell(txId, productName, sum, true);
         return true;
     }
 
